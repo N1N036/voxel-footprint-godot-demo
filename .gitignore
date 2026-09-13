@@ -1,7 +1,9 @@
 .godot/
 .sconsign.dblite
-bin/*.dll
-bin/*.so
-bin/*.dylib
+bin/*
 godot-cpp/bin/
 godot-cpp/gen/
+*.windows.*.obj
+*.obj.import
+*.gdextension.uid
+*.gd.uid

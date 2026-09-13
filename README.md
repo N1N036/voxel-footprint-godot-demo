@@ -15,7 +15,7 @@ Use left/right arrows to orbit. Use up/down arrows to adjust the footprint from 
 
 ## Prerequisites
 
-- Godot 4.3+.
+- Godot 4.7 (the project metadata is saved in the current stable format).
 - A C++17 compiler and [SCons](https://scons.org/).
 - The matching `godot-cpp` bindings (installed as a submodule below).
 
