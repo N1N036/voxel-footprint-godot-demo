@@ -40,9 +40,34 @@ var report_path := ""
 var recording_dir := ""
 var experiment_running := false
 var captured_this_frame := false
+var asset_entries: Array = []
+var asset_index := 0
+var asset_picker: OptionButton
+var asset_note: Label
+var sampling_depth := 10
+var built_depth := 10
+var protect_thin := true
+var thin_pixels := 1.0
+var splat_coverage := 1.08
+var status_label: Label
+var density_picker: OptionButton
+var rebuild_button: Button
+var display_zoom := 1.0
+var material_palette := [Color("#c7a365"), Color("#527f80"), Color("#bc795c"), Color("#aaa99a"), Color("#68675f")]
+var triangle_count := 0
 
 func _ready() -> void:
-	source = _asset()
+	if FileAccess.file_exists("res://local_assets/manifest.json"):
+		asset_entries = JSON.parse_string(FileAccess.get_file_as_string("res://local_assets/manifest.json"))
+	if not asset_entries.is_empty(): asset_index=1
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--asset="): asset_index=int(arg.trim_prefix("--asset="))
+		if arg.begins_with("--depth="): sampling_depth=int(arg.trim_prefix("--depth="))
+		if arg == "--no-protect": protect_thin=false
+		if arg.begins_with("--coverage="): splat_coverage=float(arg.trim_prefix("--coverage="))
+	built_depth=sampling_depth
+	source = _load_asset(asset_index)
+	_count_triangles()
 	_build_ui()
 	_build_renderers()
 	for arg in OS.get_cmdline_user_args():
@@ -50,10 +75,16 @@ func _ready() -> void:
 		if arg.begins_with("--case="): case_index = int(arg.trim_prefix("--case=")); case_picker.select(case_index)
 		if arg.begins_with("--time="): time = float(arg.trim_prefix("--time=")); playing = false
 		if arg == "--lab-test": self_test = true; playing = false
+		if arg == "--asset-test": playing=false; _asset_test.call_deferred()
 		if arg.begins_with("--report="): report_path=arg.trim_prefix("--report="); playing=false
 		if arg.begins_with("--record="): recording_dir=arg.trim_prefix("--record="); playing=false
 	_apply_motion()
 	original_leaves = voxels.get_leaf_count()
+	if asset_index>0:
+		show_reference=true
+		reference.visible=true
+		probe.visible=false
+	asset_note.text=_asset_description()
 	if not report_path.is_empty() or not recording_dir.is_empty():
 		_experiment.call_deferred()
 
@@ -137,6 +168,18 @@ func _build_ui() -> void:
 	margin.add_child(column)
 	column.add_child(_label("MOTION LAB   /   PERSISTENT SAMPLES", 27, Color("#efd9b2")))
 	column.add_child(_label("Same triangle asset · same camera and light · 320 × 270 per view · no TAA, shadows or animated water",14))
+	var assets_row := HBoxContainer.new()
+	assets_row.add_theme_constant_override("separation",16)
+	column.add_child(assets_row)
+	assets_row.add_child(_label("ASSET",13,Color("#d5bc8a")))
+	asset_picker=OptionButton.new()
+	asset_picker.add_item("Procedural astrolabe")
+	for entry in asset_entries: asset_picker.add_item(str(entry.name).trim_prefix("SM_"))
+	asset_picker.select(asset_index)
+	asset_picker.item_selected.connect(_change_asset)
+	assets_row.add_child(asset_picker)
+	asset_note=_label("",12)
+	assets_row.add_child(asset_note)
 	var panes := HBoxContainer.new()
 	panes.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panes.add_theme_constant_override("separation",24)
@@ -145,7 +188,7 @@ func _build_ui() -> void:
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panes.add_child(panel)
-		panel.add_child(_label("FIXED-PROBE TEXEL SPLATS  /  CORE ADAPTATION" if i==0 else "OBJECT-SPACE VOXELS  /  ADAPTIVE OCTREE",15,Color("#d5bc8a")))
+		panel.add_child(_label("TRIANGLE REFERENCE / OPTIONAL TEXEL SPLATS" if i==0 else "OBJECT-SPACE VOXELS  /  ADAPTIVE OCTREE",15,Color("#d5bc8a")))
 		var vp := SubViewport.new()
 		vp.size = Vector2i(320,270)
 		vp.own_world_3d = true
@@ -210,7 +253,41 @@ func _build_ui() -> void:
 	_check(options,"Hysteresis",true,func(value: bool): voxels.set_hysteresis(value))
 	_check(options,"Freeze cut",false,func(value: bool): voxels.set_frozen(value))
 	_check(options,"Eye probe instead",false,func(value: bool): track_probe=value; refresh_probe=true)
-	_check(options,"Triangle reference",false,func(value: bool): show_reference=value; reference.visible=value; probe.visible=not value)
+	_check(options,"Triangle reference",asset_index>0,func(value: bool): show_reference=value; reference.visible=value; probe.visible=not value)
+	var detail_row := HBoxContainer.new()
+	detail_row.add_theme_constant_override("separation",12)
+	column.add_child(detail_row)
+	density_picker=OptionButton.new()
+	for text in ["Leaf: 0.075", "Leaf: 0.0375", "Leaf: 0.01875"]:
+		density_picker.add_item(text)
+	density_picker.select(sampling_depth-9)
+	density_picker.item_selected.connect(func(index: int): sampling_depth=index+9; rebuild_button.text="Rebuild samples *")
+	detail_row.add_child(density_picker)
+	rebuild_button=Button.new()
+	rebuild_button.text="Rebuild samples"
+	rebuild_button.pressed.connect(_rebuild_samples)
+	detail_row.add_child(rebuild_button)
+	_check(detail_row,"Protect thin detail",protect_thin,func(value: bool): protect_thin=value; voxels.set_preserve_features(value))
+	detail_row.add_child(_label("Thin px",12))
+	var thin_slider:=HSlider.new()
+	thin_slider.min_value=0.35; thin_slider.max_value=3.0; thin_slider.step=0.05; thin_slider.value=thin_pixels
+	thin_slider.custom_minimum_size.x=100
+	thin_slider.value_changed.connect(func(value: float): thin_pixels=value; voxels.set_feature_target(value))
+	detail_row.add_child(thin_slider)
+	detail_row.add_child(_label("Coverage",12))
+	var coverage:=HSlider.new()
+	coverage.min_value=1.0; coverage.max_value=1.6; coverage.step=0.02; coverage.value=splat_coverage
+	coverage.custom_minimum_size.x=100
+	coverage.value_changed.connect(func(value: float): splat_coverage=value; voxels.set_coverage_scale(value))
+	detail_row.add_child(coverage)
+	detail_row.add_child(_label("Zoom",12))
+	var zoom:=HSlider.new()
+	zoom.min_value=0.55; zoom.max_value=2.0; zoom.step=0.05; zoom.value=1
+	zoom.custom_minimum_size.x=100
+	zoom.value_changed.connect(func(value: float): display_zoom=value)
+	detail_row.add_child(zoom)
+	status_label=_label("",12,Color("#d5bc8a"))
+	column.add_child(status_label)
 	description = _label("",13)
 	column.add_child(description)
 	column.add_child(_label("Scope: single probe, first-hit triangle sampling, face-aligned quads. No multi-probe blending / hole filling / outlines. CPU timings are not a GPU method benchmark.",12,Color("#8da7ac")))
@@ -240,9 +317,13 @@ func _build_renderers() -> void:
 		camera.make_current()
 		cameras.append(camera)
 	voxels=VoxelOctreeDemo.new()
+	voxels.set_sampling_depth(sampling_depth)
 	voxels.load_mesh(source)
 	voxels.target_pixel_footprint=2.7
 	roots[1].add_child(voxels)
+	voxels.set_preserve_features(protect_thin)
+	voxels.set_feature_target(thin_pixels)
+	voxels.set_coverage_scale(splat_coverage)
 	var voxel_shader := Shader.new()
 	voxel_shader.code="shader_type spatial; render_mode unshaded; varying flat vec3 n; void vertex(){n=normalize(MODEL_NORMAL_MATRIX*INSTANCE_CUSTOM.xyz);} void fragment(){float l=0.30+0.70*max(dot(normalize(n),normalize(vec3(-0.6,0.8,0.6))),0.0); ALBEDO=COLOR.rgb*l;}"
 	var voxel_material := ShaderMaterial.new()
@@ -254,7 +335,7 @@ func _build_renderers() -> void:
 	reference=MeshInstance3D.new()
 	reference.mesh=source
 	var reference_shader := Shader.new()
-	reference_shader.code="shader_type spatial; render_mode unshaded; varying vec3 n; void vertex(){n=normalize(MODEL_NORMAL_MATRIX*NORMAL);} void fragment(){float l=0.30+0.70*max(dot(normalize(n),normalize(vec3(-0.6,0.8,0.6))),0.0); ALBEDO=COLOR.rgb*l;}"
+	reference_shader.code="shader_type spatial; render_mode unshaded, cull_disabled; varying vec3 n; void vertex(){n=normalize(MODEL_NORMAL_MATRIX*NORMAL);} void fragment(){float l=0.30+0.70*max(dot(normalize(n),normalize(vec3(-0.6,0.8,0.6))),0.0); ALBEDO=COLOR.rgb*l;}"
 	var mat := ShaderMaterial.new()
 	mat.shader=reference_shader
 	reference.material_override=mat
@@ -291,11 +372,11 @@ func _apply_motion() -> void:
 			camera_pos=focus+(fixed_origin-focus).normalized()*(18.0+0.18*sin(time*10))
 			description.text="THRESHOLD JITTER · small repeated distance changes. Toggle hysteresis and compare voxel cut churn."
 	for cam in cameras:
-		cam.position=camera_pos
+		cam.position=focus+(camera_pos-focus)/display_zoom
 		cam.look_at(target)
 	voxels.transform=object_transform
 	reference.transform=object_transform
-	probe_origin=camera_pos if track_probe else fixed_origin
+	probe_origin=cameras[0].position if track_probe else fixed_origin
 	if refresh_probe or object_transform!=previous_transform or probe_origin!=previous_origin:
 		probe.capture(object_transform,probe_origin,resolution)
 		captured_this_frame=true
@@ -309,9 +390,14 @@ func _process(delta: float) -> void:
 	time_slider.set_value_no_signal(time)
 	play_button.text="Pause" if playing else "Play"
 	left_stats.text="%d splats · %.1f ms last CPU capture · %.1f%% slot reassignment" % [probe.get_splat_count(),probe.get_capture_ms(),(probe.get_reassignment()*100 if captured_this_frame else 0)]
+	if show_reference:
+		left_stats.text="Original LOD0 triangles: %d · shared palette and normals · no resampling" % triangle_count
 	var churn: float=voxels.get_cut_churn()
 	if playing: peak_churn=maxf(peak_churn,churn); sum_churn+=churn; churn_frames+=1
 	right_stats.text="%d / %d voxels · %.2f ms select · %.1f%% cut churn · %.1f px" % [voxels.get_selected_count(),voxels.get_leaf_count(),voxels.get_selection_ms(),churn*100,voxels.target_pixel_footprint]
+	status_label.text="Thin target %.2f px · coverage %.2f× · source leaf %.5f units · finer leaves require Rebuild · coverage thickens silhouettes" % [thin_pixels,splat_coverage,38.4/pow(2,sampling_depth)]
+	if built_depth!=sampling_depth:
+		status_label.text="Pending leaf-size change: press Rebuild samples to apply. Current leaf %.5f units." % (38.4/pow(2,built_depth))
 	if not capture_path.is_empty():
 		capture_frame+=1
 		if capture_frame==12:
@@ -342,6 +428,96 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_SPACE: playing=not playing
 		if event.keycode==KEY_ESCAPE: get_tree().change_scene_to_file("res://main.tscn")
+
+func _load_asset(index: int) -> ArrayMesh:
+	if index<=0 or index>asset_entries.size(): return _asset()
+	var data: Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://local_assets/"+str(asset_entries[index-1].file)))
+	var minimum:=Vector3(INF,INF,INF)
+	var maximum:=-minimum
+	for section in data.sections:
+		for p in section.positions:
+			var v:=Vector3(p[1],p[2],-p[0])
+			minimum=minimum.min(v); maximum=maximum.max(v)
+	var extent:=maximum-minimum
+	var scale_factor: float=5.5/maxf(extent.x,maxf(extent.y,extent.z))
+	var center:=Vector3((minimum.x+maximum.x)*0.5,minimum.y,(minimum.z+maximum.z)*0.5)
+	var mesh:=ArrayMesh.new()
+	for section in data.sections:
+		var vertices:=PackedVector3Array()
+		var normals:=PackedVector3Array()
+		var colors:=PackedColorArray()
+		for p in section.positions: vertices.append((Vector3(p[1],p[2],-p[0])-center)*scale_factor)
+		for n in section.normals: normals.append(Vector3(n[1],n[2],-n[0]).normalized())
+		colors.resize(vertices.size())
+		colors.fill(material_palette[int(section.material_slot)%material_palette.size()])
+		var arrays: Array=[]
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX]=vertices
+		arrays[Mesh.ARRAY_NORMAL]=normals
+		arrays[Mesh.ARRAY_COLOR]=colors
+		arrays[Mesh.ARRAY_INDEX]=PackedInt32Array(section.indices)
+		if not vertices.is_empty(): mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	return mesh
+
+func _asset_description() -> String:
+	if asset_index==0:return "Procedural source mesh"
+	return "Apophenia · LOD0 · longest axis normalized to 5.5 · material-slot colours (no UE textures)"
+
+func _change_asset(index: int) -> void:
+	asset_index=index
+	source=_load_asset(index)
+	_count_triangles()
+	voxels.set_frozen(false)
+	voxels.set_sampling_depth(sampling_depth)
+	voxels.load_mesh(source)
+	built_depth=sampling_depth
+	probe.load_mesh(source)
+	reference.mesh=source
+	original_leaves=voxels.get_leaf_count()
+	time=0; refresh_probe=true
+	asset_note.text=_asset_description()
+
+func _rebuild_samples() -> void:
+	voxels.set_sampling_depth(sampling_depth)
+	voxels.load_mesh(source)
+	built_depth=sampling_depth
+	original_leaves=voxels.get_leaf_count()
+	rebuild_button.text="Rebuild samples"
+
+func _count_triangles() -> void:
+	triangle_count=0
+	for surface in range(source.get_surface_count()):
+		var arrays:=source.surface_get_arrays(surface)
+		var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX]
+		triangle_count+=indices.size()/3
+
+func _asset_test() -> void:
+	set_process(false)
+	var all_valid:=true
+	for index in range(1,asset_entries.size()+1):
+		source=_load_asset(index)
+		var leaf_counts: Array[int]=[]
+		for depth in [9,10,11]:
+			voxels.set_sampling_depth(depth)
+			voxels.load_mesh(source)
+			voxels.set_frozen(false)
+			voxels.set_preserve_features(false)
+			voxels.target_pixel_footprint=6.0
+			await get_tree().process_frame
+			await get_tree().process_frame
+			var coarse:=voxels.get_selected_count()
+			var valid:=voxels.validate_cut()
+			voxels.set_preserve_features(true)
+			voxels.set_feature_target(1.0)
+			await get_tree().process_frame
+			await get_tree().process_frame
+			valid=valid and voxels.validate_cut() and voxels.get_selected_count()>=coarse
+			leaf_counts.append(voxels.get_leaf_count())
+			all_valid=all_valid and valid
+			print("ASSET_TEST ",asset_entries[index-1].name," depth=",depth," leaves=",voxels.get_leaf_count()," unprotected=",coarse," protected=",voxels.get_selected_count()," valid=",valid)
+		all_valid=all_valid and leaf_counts[1]>=leaf_counts[0] and leaf_counts[2]>=leaf_counts[1]
+	print("ASSET_TEST ", "PASS" if all_valid else "FAIL")
+	get_tree().quit(0 if all_valid else 1)
 
 func _experiment() -> void:
 	experiment_running=true

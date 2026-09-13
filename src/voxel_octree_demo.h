@@ -16,6 +16,7 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
         int children[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
         int count = 0;
         bool split = false;
+        float coherence = 1.0f;
     };
     std::vector<Node> nodes;
     std::vector<int> previous_cut;
@@ -52,6 +53,16 @@ public:
     double get_cut_churn() const { return cut_churn; }
     bool hysteresis = true;
     double cut_churn = 0;
+    int sampling_depth = 9;
+    float leaf_size = 0.075f;
+    float feature_target = 1.0f;
+    bool preserve_features = false;
+    float coverage_scale = 1.08f;
+    void set_sampling_depth(int depth);
+    void set_feature_target(float pixels) { feature_target = pixels; }
+    void set_preserve_features(bool enabled) { preserve_features = enabled; }
+    void set_coverage_scale(float scale) { coverage_scale = scale; dirty = true; }
+    void reset_lod_history();
     void set_normal_mode(int mode);
     void set_voxel_shadows(bool enabled);
 };
