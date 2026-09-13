@@ -1,4 +1,5 @@
 #include "voxel_octree_demo.h"
+#include "surface_color.h"
 #include <godot_cpp/classes/box_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/shader.hpp>
@@ -34,21 +35,20 @@ void VoxelOctreeDemo::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_hysteresis", "enabled"), &VoxelOctreeDemo::set_hysteresis);
     ClassDB::bind_method(D_METHOD("get_cut_churn"), &VoxelOctreeDemo::get_cut_churn);
     ClassDB::bind_method(D_METHOD("set_sampling_depth","depth"), &VoxelOctreeDemo::set_sampling_depth);
-    ClassDB::bind_method(D_METHOD("set_feature_target","pixels"), &VoxelOctreeDemo::set_feature_target);
-    ClassDB::bind_method(D_METHOD("set_preserve_features","enabled"), &VoxelOctreeDemo::set_preserve_features);
-    ClassDB::bind_method(D_METHOD("set_coverage_scale","scale"), &VoxelOctreeDemo::set_coverage_scale);
 }
-void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal) {
+void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal, float area) {
     int xyz[3];
     for (int a=0;a<3;++a) { xyz[a]=int(std::floor((p[a]+19.2f)/leaf_size)); if(xyz[a]<0||xyz[a]>=(1<<sampling_depth)) return; }
     uint64_t key=uint64_t(xyz[0]) | (uint64_t(xyz[1])<<sampling_depth) | (uint64_t(xyz[2])<<(2*sampling_depth));
-    if(!occupied.insert(key).second) return;
-    ++leaf_count;
-    float n=noise(p);
+    bool fresh=occupied.insert(key).second;
+    if(!fresh && area==0)return;
+    if(fresh)++leaf_count;
+    float n=imported?0.0f:noise(p);
     c=Color(std::clamp(c.r+n,0.0f,1.0f),std::clamp(c.g+n,0.0f,1.0f),std::clamp(c.b+n,0.0f,1.0f),1);
     int index=0;
     for(int depth=0;depth<=sampling_depth;++depth) {
-        nodes[index].position += p; nodes[index].color += c; nodes[index].normal += normal; ++nodes[index].count;
+        nodes[index].surface_area += area;
+        if(fresh) { nodes[index].position += p; nodes[index].color += c; nodes[index].normal += normal; ++nodes[index].count; }
         if(depth==sampling_depth) break;
         int bit=sampling_depth-1-depth;
         int slot=((xyz[0]>>bit)&1)*4+((xyz[1]>>bit)&1)*2+((xyz[2]>>bit)&1);
@@ -171,12 +171,7 @@ void VoxelOctreeDemo::select(int index,const Transform3D &view,float focal,float
     float depth=std::max(near_plane,-p.z-n.size*0.866026f);
     float pixels=n.size*focal/depth;
     bool leaf=n.size<leaf_size*1.01f;
-    // Surface-area occupancy is low for a thin feature crossing a larger cell.
-    // Opposing normals flag multiple surfaces that averaging could collapse.
-    float area_coverage=n.count*leaf_size*leaf_size/(n.size*n.size);
-    bool fragile=area_coverage<0.40f || n.coherence<0.65f;
-    float desired=preserve_features&&fragile?std::min(target,feature_target):target;
-    float threshold=desired*(hysteresis?(n.split?0.88f:1.12f):1.0f);
+    float threshold=target*(hysteresis?(n.split?0.88f:1.12f):1.0f);
     if(leaf||pixels<=threshold) { n.split=false; cut.push_back(index); return; }
     n.split=true;
     for(int child:n.children) if(child>=0)select(child,view,focal,near_plane,cut);
@@ -203,14 +198,18 @@ void VoxelOctreeDemo::_process(double) {
     instances->set_instance_count(int(cut.size()));
     PackedFloat32Array buffer; buffer.resize(int(cut.size())*20); float *data=buffer.ptrw();
     for(size_t i=0;i<cut.size();++i) {
-        const Node &n=nodes[cut[i]]; float s=n.size*coverage_scale;
+        const Node &n=nodes[cut[i]]; float s=n.size*1.08f;
         // Bound the filtered centroid's offset so adjacent cubes overlap even
         // when source samples sit on opposite edges of their leaf cells.
         Vector3 offset=n.position-n.center;
         for(int axis=0;axis<3;++axis)offset[axis]=std::clamp(offset[axis],-n.size*0.025f,n.size*0.025f);
         Vector3 p=n.center+offset; Color c=n.color;
         if(diagnostic)c=Color::from_hsv(std::fmod(std::log2(n.size/leaf_size)*0.16f+0.04f,1.0f),0.65f,0.95f);
-        float values[20]={s,0,0,p.x,0,s,0,p.y,0,0,s,p.z,c.r,c.g,c.b,1,n.normal.x,n.normal.y,n.normal.z,0};
+        // Object-space projected area estimate, NOT binary occupancy. Multiple
+        // overlapping sheets may saturate this scalar; it is not a union mask.
+        float dominant=std::max({std::abs(n.normal.x),std::abs(n.normal.y),std::abs(n.normal.z)});
+        float coverage=imported?std::clamp(n.surface_area*dominant/(n.size*n.size),0.0f,1.0f):1.0f;
+        float values[20]={s,0,0,p.x,0,s,0,p.y,0,0,s,p.z,c.r,c.g,c.b,1,n.normal.x,n.normal.y,n.normal.z,coverage};
         std::copy(values,values+20,data+i*20);
     }
     instances->set_buffer(buffer); previous_cut=std::move(cut); dirty=false;
@@ -243,28 +242,33 @@ bool VoxelOctreeDemo::validate_cut() const {
     return true;
 }
 void VoxelOctreeDemo::load_mesh(const Ref<Mesh> &mesh) {
+    imported=true;
     nodes.clear(); previous_cut.clear(); occupied.clear(); leaf_count=0; nodes.emplace_back();
     for(int surface=0;surface<mesh->get_surface_count();++surface) {
         Array arrays=mesh->surface_get_arrays(surface);
         PackedVector3Array vertices=arrays[Mesh::ARRAY_VERTEX], normals=arrays[Mesh::ARRAY_NORMAL];
         PackedColorArray colors=arrays[Mesh::ARRAY_COLOR];
         PackedInt32Array indices=arrays[Mesh::ARRAY_INDEX];
+        PackedVector2Array uvs=arrays[Mesh::ARRAY_TEX_UV];
+        SurfaceColor surface_color(mesh->surface_get_material(surface));
         int count=indices.is_empty()?vertices.size():indices.size();
         for(int i=0;i+2<count;i+=3) {
             int ids[3]; for(int k=0;k<3;++k)ids[k]=indices.is_empty()?i+k:indices[i+k];
             Vector3 a=vertices[ids[0]],b=vertices[ids[1]],c=vertices[ids[2]];
             int steps=std::max(1,int(std::ceil(std::max({a.distance_to(b),b.distance_to(c),c.distance_to(a)})/(leaf_size*0.6f))));
+            float area=(b-a).cross(c-a).length()/float((steps+1)*(steps+2));
             for(int u=0;u<=steps;++u)for(int v=0;v<=steps-u;++v) {
                 float x=float(u)/steps,y=float(v)/steps,z=1-x-y;
                 Vector3 n=normals.is_empty()?(b-a).cross(c-a).normalized():(normals[ids[0]]*z+normals[ids[1]]*x+normals[ids[2]]*y).normalized();
                 Color color=colors.is_empty()?Color(0.8f,0.6f,0.3f):colors[ids[0]]*z+colors[ids[1]]*x+colors[ids[2]]*y;
-                sample(a*z+b*x+c*y,color,n);
+                Vector2 uv=uvs.is_empty()?Vector2():uvs[ids[0]]*z+uvs[ids[1]]*x+uvs[ids[2]]*y;
+                color=surface_color.sample(uv,color);
+                sample(a*z+b*x+c*y,color,n,area);
             }
         }
     }
     for(Node &n:nodes) {
         if(n.count==0)continue;
-        n.coherence=n.normal.length()/float(n.count);
         n.position/=float(n.count); n.color/=float(n.count); n.color.a=1;
         n.normal=n.normal.length_squared()>0.001f?n.normal.normalized():Vector3(0,1,0);
     }

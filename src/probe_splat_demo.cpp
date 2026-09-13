@@ -9,21 +9,34 @@
 #include <cmath>
 using namespace godot;
 void ProbeSplatDemo::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("linearize_image","source","srgb"),&ProbeSplatDemo::linearize_image);
     ClassDB::bind_method(D_METHOD("load_mesh","mesh"),&ProbeSplatDemo::load_mesh);
     ClassDB::bind_method(D_METHOD("capture","object_transform","origin","resolution"),&ProbeSplatDemo::capture);
     ClassDB::bind_method(D_METHOD("get_capture_ms"),&ProbeSplatDemo::get_capture_ms);
     ClassDB::bind_method(D_METHOD("get_reassignment"),&ProbeSplatDemo::get_reassignment);
     ClassDB::bind_method(D_METHOD("get_splat_count"),&ProbeSplatDemo::get_splat_count);
 }
+Ref<Image> ProbeSplatDemo::linearize_image(const Ref<Image> &source,bool srgb) {
+    if(source.is_null()||source->is_empty())return Ref<Image>();
+    Ref<Image> result=Image::create_empty(source->get_width(),source->get_height(),false,Image::FORMAT_RGBAF);
+    for(int y=0;y<source->get_height();++y)for(int x=0;x<source->get_width();++x) {
+        Color c=source->get_pixel(x,y);
+        result->set_pixel(x,y,srgb?c.srgb_to_linear():c);
+    }
+    return result;
+}
 void ProbeSplatDemo::load_mesh(const Ref<Mesh> &mesh) {
-    triangles.clear(); order.clear(); tree.clear(); prior_triangle.clear();
+    triangles.clear(); surfaces.clear(); order.clear(); tree.clear(); prior_triangle.clear();
     for(int s=0;s<mesh->get_surface_count();++s) {
         Array a=mesh->surface_get_arrays(s); PackedVector3Array p=a[Mesh::ARRAY_VERTEX],n=a[Mesh::ARRAY_NORMAL];
         PackedColorArray c=a[Mesh::ARRAY_COLOR]; PackedInt32Array indices=a[Mesh::ARRAY_INDEX];
+        PackedVector2Array uv=a[Mesh::ARRAY_TEX_UV];
+        surfaces.emplace_back(mesh->surface_get_material(s));
         int count=indices.is_empty()?p.size():indices.size();
         for(int i=0;i+2<count;i+=3) {
-            Tri t;
+            Tri t; t.surface=s;
             for(int k=0;k<3;++k) { int j=indices.is_empty()?i+k:indices[i+k]; t.p[k]=p[j]; t.n[k]=n.is_empty()?Vector3(0,1,0):n[j]; t.c[k]=c.is_empty()?Color(0.8f,0.6f,0.3f):c[j]; }
+            for(int k=0;k<3;++k) { int j=indices.is_empty()?i+k:indices[i+k]; t.uv[k]=uv.is_empty()?Vector2():uv[j]; }
             t.center=(t.p[0]+t.p[1]+t.p[2])/3; triangles.push_back(t);
         }
     }
@@ -92,6 +105,7 @@ void ProbeSplatDemo::capture(Transform3D object_transform,Vector3 origin,int res
         const Tri &t=triangles[hit]; Vector3 p=origin+ray*distance;
         Vector3 n=object_transform.basis.inverse().transposed().xform(t.n[0]*(1-u-v)+t.n[1]*u+t.n[2]*v).normalized();
         Color c=t.c[0]*(1-u-v)+t.c[1]*u+t.c[2]*v;
+        c=surfaces[t.surface].sample(t.uv[0]*(1-u-v)+t.uv[1]*u+t.uv[2]*v,c);
         // Shared Chebyshev depth at all four corners: a cubemap-face-aligned
         // world quad, NOT a view-facing billboard. Fixed 3% overlap.
         float width=2*distance/resolution*1.03f;

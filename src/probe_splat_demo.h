@@ -2,12 +2,14 @@
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <vector>
+#include "surface_color.h"
 namespace godot {
 class ProbeSplatDemo : public MultiMeshInstance3D {
     GDCLASS(ProbeSplatDemo,MultiMeshInstance3D)
-    struct Tri { Vector3 p[3], n[3]; Color c[3]; Vector3 center; };
+    struct Tri { Vector3 p[3], n[3]; Vector2 uv[3]; Color c[3]; Vector3 center; int surface=0; };
     struct Branch { Vector3 lo,hi; int start=0,count=0,left=-1,right=-1; };
     std::vector<Tri> triangles;
+    std::vector<SurfaceColor> surfaces;
     std::vector<int> order;
     std::vector<Branch> tree;
     std::vector<int> prior_triangle;
@@ -20,6 +22,7 @@ class ProbeSplatDemo : public MultiMeshInstance3D {
 protected:
     static void _bind_methods();
 public:
+    Ref<Image> linearize_image(const Ref<Image> &source, bool srgb);
     void load_mesh(const Ref<Mesh> &mesh);
     void capture(Transform3D object_transform,Vector3 origin,int resolution);
     double get_capture_ms() const { return capture_ms; }

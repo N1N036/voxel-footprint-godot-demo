@@ -19,7 +19,7 @@ Or open project.godot in Godot and press F6/F5 after building. Close this projec
 
 ## Explore
 
-The lab supports [local Unreal meshes and thin-detail controls](docs/imported-assets.md): an asset picker, finer source grids, feature-sensitive LOD, and adjustable coverage. Exported assets stay in the ignored local_assets folder.
+The lab supports [textured Unreal meshes and a three-pane coverage experiment](docs/imported-assets.md): actual UV base-colour transfer, matched pixel squares, and continuous/quantized coverage using the baseline's exact voxel cut. Exported assets stay local and ignored.
 
 **New: [Motion lab](docs/motion-lab.md)** — open it from the lighthouse to compare a fixed-probe texel-splat core adaptation with object-space voxels under synchronized camera/object motion, reveal, zoom, and threshold jitter. The lab includes a triangle reference and a report explaining the comparison's limits.
 

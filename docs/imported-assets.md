@@ -1,33 +1,39 @@
-# Local Unreal assets and thin-detail controls
+# Textured assets and coverage experiment
 
-The motion lab discovers `local_assets/manifest.json` and offers its entries in the asset picker. This directory is Git-ignored: project assets and potential third-party licensed content are not redistributed by the public demo.
+Three synchronized 320×270 panes show single-probe texel samples (or reference triangles), baseline object-space samples, and the **same voxel buffer/cut** with coverage reconstruction. Apophenia meshes and ten exported textures remain in ignored `local_assets/`; Unreal source assets are never saved.
 
-The current local session contains four Apophenia Cigar Room meshes: chandelier, desk lamp, globe and armchair. They are extracted from LOD0 render data with Unreal's ProceduralMeshLibrary. No source asset is saved or modified. This is not an extraction of Nanite's internal runtime clusters.
+## Texture transfer
 
-The importer changes Unreal's Z-up coordinates to Godot's Y-up coordinates, centres the base, and normalizes the longest dimension to 5.5 scene units. Both views receive the same converted triangles and normals. Material sections receive a neutral palette. Unreal textures, materials, glass, opacity masks and displacement are **not** reproduced. Thin details that exist only in textures cannot be evaluated here.
+The exporter resolves actual section material slots and direct Base Color texture connections, preserving UV0. Reference triangles and both C++ samplers use the same linearized images, bilinear repeating UVs and mip zero. Probe hits interpolate UVs; voxel samples store texture colour and parents average leaf colours in linear space. Imported colour noise is disabled. Leaf colours retain the first sample entering each cell, not an area integral.
 
-## Controls
+This is opaque base colour, not UE shader baking: no glass, opacity masks, normal maps, roughness or emissive transfer. Unsupported base-colour graphs are rejected rather than guessed. Assets are Y-up, base-centred and normalized to 5.5 units on their longest axis.
 
-- **Leaf size + Rebuild samples:** 0.075, 0.0375 or 0.01875 normalized scene units. Finer source samples preserve smaller features before LOD selection. Sampling depth is not applied until rebuild (or changing asset).
-- **Voxel px:** general projected-cell width target. Lower it to descend further everywhere.
-- **Protect thin detail:** uses a stricter target when occupied leaf surface area is sparse relative to a parent cell, or descendant normals strongly disagree. This is a heuristic, not a topology-preservation guarantee.
-- **Thin px:** the stricter footprint for those regions. Start at 1 pixel; try 0.5 for small supports.
-- **Coverage:** instance width multiplier, from 1.0 to 1.6. It can close sample gaps but thickens outlines and may merge adjacent features.
-- **Zoom:** inspects the same transformed mesh in both panes.
-- **Triangle reference:** enabled initially for imported assets. Disable to return the left pane to the limited fixed-probe splat adaptation.
+## Matched footprints
 
-Suggested order: compare the triangle reference, choose finer leaves and rebuild, lower Thin px, then cautiously increase coverage to about 1.15–1.25. Lowering a LOD threshold cannot restore geometry already lost during source sampling. Once a feature projects below one display pixel, visibility can still fluctuate without a reconstruction/antialiasing solution.
+Shared px controls identical continuous screen-space square widths for texel and baseline voxel samples, at every depth/orientation. All panes have equal internal and displayed dimensions. Raster coverage can still differ at subpixel positions. Probe resolution controls density, not square width; equal size does not imply equal sample counts or costs.
 
-## Checks
+This controlled reconstruction replaces native cubemap-face quads and voxel cubes with screen-facing squares. It is not the full published Texel Splatting renderer. Single-probe holes do not establish limitations of its full multi-probe implementation.
 
-`godot --path . comparison.tscn -- --asset-test` rebuilds every local asset at all three depths, checks complete nonoverlapping hierarchy coverage, verifies that finer grids retain at least as many occupied cells for these meshes, and confirms that feature protection selects at least as many representatives at the same 6-pixel general target.
+## Coverage
 
-All 12 combinations passed in this session. At depth 10, chandelier selection increased from 839 to 2,184 representatives with protection; lamp 2,796 to 15,266; globe 2,618 to 12,070; chair 7,536 to 19,587. These are geometry-selection counters, not visual error measurements.
+Triangle area is distributed evenly over its barycentric sample lattice, including repeat samples in occupied cells. Areas accumulate up the hierarchy independently of baseline occupancy/colour/normal data. Coverage is `clamp(area * max(abs(normal)) / cell_width², 0, 1)`.
 
-The original motion-report JSON records the older astrolabe settings, not these imported-asset defaults. To reproduce that setup, select asset 0, depth 9, and disable feature protection.
+The third pane shares exactly the baseline buffer, cut and transforms. Continuous mode renders width `shared_px * sqrt(coverage)`. Quantized mode first rounds coverage to 0, ¼, ½, ¾ or 1. Diagnostic mode shows raw coverage in grayscale. There is no alpha blending, animated dithering or stochastic discard.
 
-## Export more meshes
+This is an area estimate, not exact clipping or a union mask. Lattice boundaries introduce error; overlapping sheets can saturate coverage. Quantization can discard features or jump at LOD transitions. Shrinking squares cannot preserve wire direction or multiple surfaces. It may reduce dilation but can introduce holes. Surface-plane reconstruction is not implemented yet.
 
-`tools/export_static_meshes.py` is a read-only Unreal editor Python exporter driven by `VOXEL_EXPORT_DIRECTORY` and `VOXEL_EXPORT_ASSETS` environment variables. Point the directory at this project's `local_assets`, and list `/Game/...` static-mesh paths separated by semicolons. It replaces the manifest with the selected set. Run it using `UnrealEditor-Cmd.exe <project.uproject> -run=pythonscript -script=<absolute-script-path> -EnablePlugins=PythonScriptPlugin,ProceduralMeshComponent -unattended -nullrhi`.
+Earlier thin-feature LOD heuristics, Thin px, adjustable dilation and density UI are removed. Source depth is fixed at 10. Lighthouse rendering is unchanged. Stable sample IDs do not prove shimmer-free images or stable LOD appearance.
 
-Restart the motion lab to discover the updated manifest. Keep exported asset data out of a public repository unless redistribution rights are established.
+## Run and test
+
+Run `godot --path . comparison.tscn`. Choose an asset, pause/scrub, test orbit and zoom, toggle Triangle reference or Lighting, and switch coverage modes.
+
+```powershell
+godot --path . comparison.tscn -- --asset-test
+godot --path . comparison.tscn -- --lab-test
+godot --path . --script tools/test_pixel_footprint.gd
+```
+
+Checks cover UV/material presence, colour variation, finite fractional coverage, shared buffers, synchronized cameras/transforms, complete hierarchy cuts over 21 poses, and GPU square area across depths/sizes. These are regression checks, not perceptual stability measurements.
+
+For more assets set `VOXEL_EXPORT_DIRECTORY` to `local_assets` and `VOXEL_EXPORT_ASSETS` to semicolon-separated UE mesh paths. Run `tools/export_static_meshes.py` through Unreal's Python commandlet with PythonScriptPlugin and ProceduralMeshComponent enabled. The local manifest is replaced. These raw inputs are for development, not a packaged game export.

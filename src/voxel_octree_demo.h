@@ -16,7 +16,7 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
         int children[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
         int count = 0;
         bool split = false;
-        float coherence = 1.0f;
+        float surface_area = 0;
     };
     std::vector<Node> nodes;
     std::vector<int> previous_cut;
@@ -27,9 +27,10 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
     int normal_mode = 0;
     float target = 1.5f;
     bool diagnostic = false, dirty = true, frozen = false;
+    bool imported = false;
     int leaf_count = 0;
     double selection_ms = 0;
-    void sample(Vector3 p, Color c, Vector3 normal = Vector3(0,1,0));
+    void sample(Vector3 p, Color c, Vector3 normal = Vector3(0,1,0), float area = 0);
     void box(Vector3 p, Vector3 size, Color c);
     void ellipsoid(Vector3 p, Vector3 scale, Color c);
     void cylinder(Vector3 p, float radius, float top_radius, float height, Color c);
@@ -55,13 +56,7 @@ public:
     double cut_churn = 0;
     int sampling_depth = 9;
     float leaf_size = 0.075f;
-    float feature_target = 1.0f;
-    bool preserve_features = false;
-    float coverage_scale = 1.08f;
     void set_sampling_depth(int depth);
-    void set_feature_target(float pixels) { feature_target = pixels; }
-    void set_preserve_features(bool enabled) { preserve_features = enabled; }
-    void set_coverage_scale(float scale) { coverage_scale = scale; dirty = true; }
     void reset_lod_history();
     void set_normal_mode(int mode);
     void set_voxel_shadows(bool enabled);
