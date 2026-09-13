@@ -17,6 +17,10 @@ var dragging := false
 var capture_frames := 0
 var capture_path := ""
 var elapsed := 0.0
+var normal_mode := 0
+var voxel_shadows := true
+var normal_selector: OptionButton
+var shadows_button: CheckButton
 
 func _ready() -> void:
 	DisplayServer.window_set_title("LAST LIGHT / Voxel atelier")
@@ -53,6 +57,14 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--self-test":
 			_self_test.call_deferred()
+		if arg.begins_with("--normals="):
+			normal_mode = int(arg.trim_prefix("--normals="))
+			voxels.set_normal_mode(normal_mode)
+			normal_selector.select(normal_mode)
+		if arg == "--no-voxel-shadows":
+			voxel_shadows = false
+			voxels.set_voxel_shadows(false)
+			shadows_button.set_pressed_no_signal(false)
 		if arg.begins_with("--capture="):
 			capture_path = arg.trim_prefix("--capture=")
 		if arg.begins_with("--footprint="):
@@ -188,9 +200,12 @@ func _make_hud() -> void:
 	style.set_corner_radius_all(7)
 	panel.add_theme_stylebox_override("panel", style)
 	column.add_child(panel)
+	var panel_column := VBoxContainer.new()
+	panel_column.add_theme_constant_override("separation", 10)
+	panel.add_child(panel_column)
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 20)
-	panel.add_child(controls)
+	panel_column.add_child(controls)
 	var slider_column := VBoxContainer.new()
 	controls.add_child(slider_column)
 	footprint_label = _label("VOXEL FOOTPRINT   /   1.50 px", 12, Color("#ebd6ad"))
@@ -212,6 +227,20 @@ func _make_hud() -> void:
 	_button(controls, "Freeze LOD", func(): frozen = not frozen; voxels.set_frozen(frozen))
 	_button(controls, "Auto orbit", func(): auto_orbit = not auto_orbit)
 	_button(controls, "Reset view", func(): orbit = 0.48; elevation = 0.40; distance = 29.0, false)
+	var normal_controls := HBoxContainer.new()
+	normal_controls.add_theme_constant_override("separation", 14)
+	panel_column.add_child(normal_controls)
+	normal_controls.add_child(_label("SHADING", 12, Color("#ebd6ad")))
+	normal_selector = OptionButton.new()
+	for option in ["One normal / voxel", "Cube-face normals", "Normal colours"]:
+		normal_selector.add_item(option)
+	normal_selector.item_selected.connect(func(index: int): normal_mode = index; voxels.set_normal_mode(index))
+	normal_controls.add_child(normal_selector)
+	shadows_button = CheckButton.new()
+	shadows_button.text = "Receive voxel shadows"
+	shadows_button.button_pressed = true
+	shadows_button.toggled.connect(func(enabled: bool): voxel_shadows = enabled; voxels.set_voxel_shadows(enabled))
+	normal_controls.add_child(shadows_button)
 	var help := _label("DRAG  orbit     SCROLL  zoom     SPACE  auto orbit     H  hide interface", 12, Color("#adbfbd"))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(help)

@@ -2,6 +2,8 @@
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
+#include <godot_cpp/classes/shader.hpp>
 #include <unordered_set>
 #include <vector>
 namespace godot {
@@ -19,6 +21,9 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
     std::vector<int> previous_cut;
     std::unordered_set<uint64_t> occupied;
     Ref<MultiMesh> instances;
+    Ref<ShaderMaterial> voxel_material;
+    Ref<Shader> shadowed_shader, unshadowed_shader;
+    int normal_mode = 0;
     float target = 1.5f;
     bool diagnostic = false, dirty = true, frozen = false;
     int leaf_count = 0;
@@ -42,5 +47,7 @@ public:
     int get_leaf_count() const { return leaf_count; }
     double get_selection_ms() const { return selection_ms; }
     bool validate_cut() const;
+    void set_normal_mode(int mode);
+    void set_voxel_shadows(bool enabled);
 };
 }

@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <algorithm>
@@ -27,6 +28,8 @@ void VoxelOctreeDemo::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_leaf_count"), &VoxelOctreeDemo::get_leaf_count);
     ClassDB::bind_method(D_METHOD("get_selection_ms"), &VoxelOctreeDemo::get_selection_ms);
     ClassDB::bind_method(D_METHOD("validate_cut"), &VoxelOctreeDemo::validate_cut);
+    ClassDB::bind_method(D_METHOD("set_normal_mode", "mode"), &VoxelOctreeDemo::set_normal_mode);
+    ClassDB::bind_method(D_METHOD("set_voxel_shadows", "enabled"), &VoxelOctreeDemo::set_voxel_shadows);
 }
 void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal) {
     int xyz[3];
@@ -148,10 +151,11 @@ void VoxelOctreeDemo::_ready() {
     build_scene();
     instances.instantiate(); instances->set_transform_format(MultiMesh::TRANSFORM_3D); instances->set_use_colors(true); instances->set_use_custom_data(true);
     Ref<BoxMesh> cube; cube.instantiate(); cube->set_size(Vector3(1,1,1));
-    Ref<Shader> shader; shader.instantiate();
-    shader->set_code("shader_type spatial; render_mode specular_disabled; void vertex() { NORMAL = normalize(INSTANCE_CUSTOM.xyz); } void fragment() { ALBEDO = COLOR.rgb; ROUGHNESS = 1.0; }");
-    Ref<ShaderMaterial> material; material.instantiate(); material->set_shader(shader);
-    cube->set_material(material); instances->set_mesh(cube); set_multimesh(instances);
+    shadowed_shader = ResourceLoader::get_singleton()->load("res://voxel.gdshader");
+    unshadowed_shader.instantiate();
+    unshadowed_shader->set_code(shadowed_shader->get_code().replace("render_mode specular_disabled;", "render_mode specular_disabled, shadows_disabled;"));
+    voxel_material.instantiate(); voxel_material->set_shader(shadowed_shader);
+    cube->set_material(voxel_material); instances->set_mesh(cube); set_multimesh(instances);
     set_custom_aabb(AABB(Vector3(-19.2f,-19.2f,-19.2f),Vector3(38.4f,38.4f,38.4f)));
 }
 void VoxelOctreeDemo::select(int index,const Transform3D &view,float focal,float near_plane,std::vector<int> &cut) {
@@ -194,6 +198,16 @@ void VoxelOctreeDemo::_process(double) {
     instances->set_buffer(buffer); previous_cut=std::move(cut); dirty=false;
 }
 void VoxelOctreeDemo::set_target_pixel_footprint(float value) { target=std::clamp(value,0.5f,8.0f); }
+void VoxelOctreeDemo::set_normal_mode(int mode) {
+    normal_mode=std::clamp(mode,0,2);
+    if(voxel_material.is_valid())voxel_material->set_shader_parameter("normal_mode",normal_mode);
+}
+void VoxelOctreeDemo::set_voxel_shadows(bool enabled) {
+    if(voxel_material.is_valid()) {
+        voxel_material->set_shader(enabled?shadowed_shader:unshadowed_shader);
+        set_normal_mode(normal_mode);
+    }
+}
 bool VoxelOctreeDemo::validate_cut() const {
     // Every source leaf must have exactly one selected ancestor (or itself).
     if(previous_cut.empty())return false;

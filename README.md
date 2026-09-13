@@ -23,6 +23,8 @@ Or open project.godot in Godot and press F6/F5 after building. Close this projec
 - The footprint slider changes the target in **internal** pixels.
 - Resolution selects 320×180, 480×270 or 640×360. Default 480×270 scales exactly 3× at the initial 1440×810 window.
 - LOD colours displays octree depth; Freeze LOD holds the cut while you move the camera.
+- Shading selects One normal / voxel (default), Cube-face normals, or unlit Normal colours. The surface normal is passed as a flat per-instance varying and explicitly replaces the fragment normal on all six faces.
+- Receive voxel shadows toggles shadow reception on the voxel material only. Turn it off to separate normal-based lighting from cube self-shadowing; cast shadows on the water and lamp distance attenuation remain.
 - Space toggles auto orbit; H hides the interface; Escape exits.
 
 ## Renderer
@@ -58,6 +60,9 @@ For deterministic view capture:
 godot --path . -- --capture=C:/absolute/path/view.png
 godot --path . -- --capture=C:/absolute/path/lod.png --footprint=4 --lod
 godot --path . -- --self-test
+godot --path . -- --capture=C:/absolute/path/normals.png --normals=2 --footprint=4
+godot --path . -- --capture=C:/absolute/path/faces.png --normals=1 --footprint=4
+godot --path . -- --capture=C:/absolute/path/surface.png --no-voxel-shadows
 ```
 
 The screenshot saves after 150 rendered frames. Water animation is time-based.
