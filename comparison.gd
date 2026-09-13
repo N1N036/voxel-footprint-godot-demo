@@ -8,9 +8,6 @@ var source: ArrayMesh
 var voxels: VoxelOctreeDemo
 var probe: ProbeSplatDemo
 var reference: MeshInstance3D
-var coverage_view: MultiMeshInstance3D
-var coverage_stats: Label
-var coverage_mode := 2
 var canvas_scale := 1.0
 var canvas_label: Label
 var canvas_slider: HSlider
@@ -186,11 +183,11 @@ func _build_ui() -> void:
 	panes.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panes.add_theme_constant_override("separation",24)
 	column.add_child(panes)
-	for i in range(3):
+	for i in range(2):
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panes.add_child(panel)
-		panel.add_child(_label(["TEXEL SPLATS / REFERENCE","OBJECT-SPACE / BASELINE","OBJECT-SPACE + COVERAGE"][i],15,Color("#d5bc8a")))
+		panel.add_child(_label(["TEXEL SPLATS / REFERENCE","OBJECT-SPACE / BASELINE"][i],15,Color("#d5bc8a")))
 		var vp := SubViewport.new()
 		vp.size = Vector2i(320,270)
 		vp.own_world_3d = true
@@ -209,8 +206,7 @@ func _build_ui() -> void:
 		stat.custom_minimum_size.y=44
 		panel.add_child(stat)
 		if i==0: left_stats = stat
-		elif i==1: right_stats = stat
-		else: coverage_stats=stat
+		else: right_stats = stat
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation",12)
 	column.add_child(controls)
@@ -264,11 +260,6 @@ func _build_ui() -> void:
 	column.add_child(detail_row)
 	detail_row.add_child(_label("Matched pixel squares",13))
 	_check(detail_row,"Lighting",true,func(value: bool): lighting=value; _sync_lighting())
-	var coverage_picker:=OptionButton.new()
-	for label in ["Coverage: continuous area","Coverage: 0 / ¼ / ½ / ¾ / 1","Coverage: diagnostic"]: coverage_picker.add_item(label)
-	coverage_picker.select(1)
-	coverage_picker.item_selected.connect(func(index: int): coverage_mode=index+1; _sync_splat_settings())
-	detail_row.add_child(coverage_picker)
 	detail_row.add_child(_label("Zoom",12))
 	var zoom:=HSlider.new()
 	zoom.min_value=0.55; zoom.max_value=2.0; zoom.step=0.05; zoom.value=1
@@ -330,10 +321,7 @@ func _build_renderers() -> void:
 	reference.mesh=source
 	reference.visible=false
 	roots[0].add_child(reference)
-	coverage_view=MultiMeshInstance3D.new()
-	coverage_view.multimesh=voxels.multimesh
-	roots[2].add_child(coverage_view)
-	for renderer in [probe,voxels,coverage_view]:
+	for renderer in [probe,voxels]:
 		var material:=ShaderMaterial.new()
 		material.shader=load("res://lab_splat.gdshader")
 		material.set_shader_parameter("normal_is_world",renderer==probe)
@@ -358,8 +346,6 @@ func _sync_splat_settings() -> void:
 	for material in splat_materials:
 		material.set_shader_parameter("pixel_size",shared_pixels)
 		material.set_shader_parameter("matched_pixels",matched_pixels)
-	splat_materials[2].set_shader_parameter("matched_pixels",true)
-	splat_materials[2].set_shader_parameter("coverage_mode",coverage_mode)
 
 func _sync_lighting() -> void:
 	for material in splat_materials: material.set_shader_parameter("lighting",lighting)
@@ -399,7 +385,6 @@ func _apply_motion() -> void:
 		cam.position=focus+(camera_pos-focus)/display_zoom
 		cam.look_at(target)
 	voxels.transform=object_transform
-	coverage_view.transform=object_transform
 	reference.transform=object_transform
 	probe_origin=cameras[0].position if track_probe else fixed_origin
 	if refresh_probe or object_transform!=previous_transform or probe_origin!=previous_origin:
@@ -420,7 +405,6 @@ func _process(delta: float) -> void:
 	var churn: float=voxels.get_cut_churn()
 	if playing: peak_churn=maxf(peak_churn,churn); sum_churn+=churn; churn_frames+=1
 	right_stats.text="%d / %d voxels · %.2f ms select · %.1f%% cut churn · %.1f px" % [voxels.get_selected_count(),voxels.get_leaf_count(),voxels.get_selection_ms(),churn*100,voxels.target_pixel_footprint]
-	coverage_stats.text="Same voxel IDs/cut · opaque area-scaled squares\nCoverage may recover gaps OR lose fine features"
 	status_label.text=("MATCHED: both splats %.2f × %.2f internal pixels · equal footprint, NOT equal sampling density" % [shared_pixels,shared_pixels]) if matched_pixels else "NATIVE: face-aligned probe quads vs voxel cubes · projected sizes are NOT matched"
 	if not capture_path.is_empty():
 		capture_frame+=1
@@ -435,8 +419,8 @@ func _process(delta: float) -> void:
 func _test_tick() -> void:
 	test_step+=1
 	if test_step%3!=0:return
-	if not voxels.validate_cut() or voxels.get_leaf_count()!=original_leaves or cameras[0].transform!=cameras[1].transform or cameras[1].transform!=cameras[2].transform or voxels.transform!=reference.transform or voxels.transform!=coverage_view.transform or voxels.multimesh!=coverage_view.multimesh:
-		push_error("Comparison coverage or persistent source leaf count failed")
+	if not voxels.validate_cut() or voxels.get_leaf_count()!=original_leaves or cameras[0].transform!=cameras[1].transform or voxels.transform!=reference.transform:
+		push_error("Comparison synchronization or persistent source leaf count failed")
 		get_tree().quit(1)
 		return
 	var index:=test_step/3-1
@@ -553,13 +537,6 @@ func _asset_test() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var valid:=voxels.validate_cut() and probe.get_splat_count()>0
-		var fractional:=0
-		var voxel_buffer: PackedFloat32Array=voxels.multimesh.buffer
-		for i in range(voxels.multimesh.instance_count):
-			var coverage: float=voxel_buffer[i*20+19]
-			valid=valid and is_finite(coverage) and coverage>=0 and coverage<=1
-			if coverage>0 and coverage<1: fractional+=1
-		valid=valid and fractional>0 and coverage_view.multimesh==voxels.multimesh
 		for surface in range(source.get_surface_count()):
 			var arrays:=source.surface_get_arrays(surface)
 			valid=valid and arrays[Mesh.ARRAY_TEX_UV].size()==arrays[Mesh.ARRAY_VERTEX].size()
@@ -573,7 +550,7 @@ func _asset_test() -> void:
 				low=low.min(color); high=high.max(color)
 			valid=valid and (high-low).length()>0.05
 		all_valid=all_valid and valid
-		print("ASSET_TEST ",asset_entries[index-1].name," UV/material/colour variance/coverage valid=",valid)
+		print("ASSET_TEST ",asset_entries[index-1].name," UV/material/colour variance valid=",valid)
 	print("ASSET_TEST ", "PASS" if all_valid else "FAIL")
 	get_tree().quit(0 if all_valid else 1)
 

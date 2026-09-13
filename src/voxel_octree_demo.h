@@ -16,7 +16,6 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
         int children[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
         int count = 0;
         bool split = false;
-        float surface_area = 0;
     };
     std::vector<Node> nodes;
     std::vector<int> previous_cut;
@@ -24,7 +23,7 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
     Ref<MultiMesh> instances;
     Ref<ShaderMaterial> voxel_material;
     Ref<ShaderMaterial> shadow_material;
-    float shadow_recession = 0.65f;
+    float shadow_recession = 1.5f;
     Ref<Shader> shadowed_shader, unshadowed_shader;
     int normal_mode = 0;
     float target = 1.5f;
@@ -32,7 +31,7 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
     bool imported = false;
     int leaf_count = 0;
     double selection_ms = 0;
-    void sample(Vector3 p, Color c, Vector3 normal = Vector3(0,1,0), float area = 0);
+    void sample(Vector3 p, Color c, Vector3 normal = Vector3(0,1,0));
     void box(Vector3 p, Vector3 size, Color c);
     void ellipsoid(Vector3 p, Vector3 scale, Color c);
     void cylinder(Vector3 p, float radius, float top_radius, float height, Color c);

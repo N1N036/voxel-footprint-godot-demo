@@ -1,6 +1,6 @@
 # Motion lab: what this comparison does and does not show
 
-**Historical report:** the implementation/settings below predate the textured, matched-footprint, three-pane coverage experiment. See [current controls and limitations](imported-assets.md). The old JSON is historical data, not results for the current renderer. Current imported samples have no colour noise; the lab uses shared pixel squares instead of the native reconstruction below.
+**Historical report:** the implementation/settings below predate the textured matched-footprint lab. See [current controls and limitations](imported-assets.md). The old JSON is historical data, not results for the current renderer. Current imported samples have no colour noise; the lab uses shared pixel squares instead of the native reconstruction below.
 
 Open **Motion lab →** from the lighthouse, or run Godot with:
 

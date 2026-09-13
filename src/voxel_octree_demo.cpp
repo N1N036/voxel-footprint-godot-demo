@@ -37,19 +37,17 @@ void VoxelOctreeDemo::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_cut_churn"), &VoxelOctreeDemo::get_cut_churn);
     ClassDB::bind_method(D_METHOD("set_sampling_depth","depth"), &VoxelOctreeDemo::set_sampling_depth);
 }
-void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal, float area) {
+void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal) {
     int xyz[3];
     for (int a=0;a<3;++a) { xyz[a]=int(std::floor((p[a]+19.2f)/leaf_size)); if(xyz[a]<0||xyz[a]>=(1<<sampling_depth)) return; }
     uint64_t key=uint64_t(xyz[0]) | (uint64_t(xyz[1])<<sampling_depth) | (uint64_t(xyz[2])<<(2*sampling_depth));
-    bool fresh=occupied.insert(key).second;
-    if(!fresh && area==0)return;
-    if(fresh)++leaf_count;
+    if(!occupied.insert(key).second) return;
+    ++leaf_count;
     float n=imported?0.0f:noise(p);
     c=Color(std::clamp(c.r+n,0.0f,1.0f),std::clamp(c.g+n,0.0f,1.0f),std::clamp(c.b+n,0.0f,1.0f),1);
     int index=0;
     for(int depth=0;depth<=sampling_depth;++depth) {
-        nodes[index].surface_area += area;
-        if(fresh) { nodes[index].position += p; nodes[index].color += c; nodes[index].normal += normal; ++nodes[index].count; }
+        nodes[index].position += p; nodes[index].color += c; nodes[index].normal += normal; ++nodes[index].count;
         if(depth==sampling_depth) break;
         int bit=sampling_depth-1-depth;
         int slot=((xyz[0]>>bit)&1)*4+((xyz[1]>>bit)&1)*2+((xyz[2]>>bit)&1);
@@ -167,7 +165,7 @@ void VoxelOctreeDemo::_ready() {
     // Shared cut/buffer. Recess only the shadow caster along the stored normal.
     // Local unit-cube displacement automatically scales with each selected LOD.
     Ref<Shader> caster_shader; caster_shader.instantiate();
-    caster_shader->set_code("shader_type spatial; render_mode specular_disabled; uniform float recession=0.65; void vertex(){VERTEX-=normalize(INSTANCE_CUSTOM.xyz)*recession;}");
+    caster_shader->set_code("shader_type spatial; render_mode specular_disabled; uniform float recession=1.5; void vertex(){VERTEX-=normalize(INSTANCE_CUSTOM.xyz)*recession;}");
     shadow_material.instantiate(); shadow_material->set_shader(caster_shader);
     shadow_material->set_shader_parameter("recession",shadow_recession);
     auto *caster=memnew(MultiMeshInstance3D);
@@ -220,11 +218,7 @@ void VoxelOctreeDemo::_process(double) {
         for(int axis=0;axis<3;++axis)offset[axis]=std::clamp(offset[axis],-n.size*0.025f,n.size*0.025f);
         Vector3 p=n.center+offset; Color c=n.color;
         if(diagnostic)c=Color::from_hsv(std::fmod(std::log2(n.size/leaf_size)*0.16f+0.04f,1.0f),0.65f,0.95f);
-        // Object-space projected area estimate, NOT binary occupancy. Multiple
-        // overlapping sheets may saturate this scalar; it is not a union mask.
-        float dominant=std::max({std::abs(n.normal.x),std::abs(n.normal.y),std::abs(n.normal.z)});
-        float coverage=imported?std::clamp(n.surface_area*dominant/(n.size*n.size),0.0f,1.0f):1.0f;
-        float values[20]={s,0,0,p.x,0,s,0,p.y,0,0,s,p.z,c.r,c.g,c.b,1,n.normal.x,n.normal.y,n.normal.z,coverage};
+        float values[20]={s,0,0,p.x,0,s,0,p.y,0,0,s,p.z,c.r,c.g,c.b,1,n.normal.x,n.normal.y,n.normal.z,0};
         std::copy(values,values+20,data+i*20);
     }
     instances->set_buffer(buffer); previous_cut=std::move(cut); dirty=false;
@@ -275,14 +269,13 @@ void VoxelOctreeDemo::load_mesh(const Ref<Mesh> &mesh) {
             int ids[3]; for(int k=0;k<3;++k)ids[k]=indices.is_empty()?i+k:indices[i+k];
             Vector3 a=vertices[ids[0]],b=vertices[ids[1]],c=vertices[ids[2]];
             int steps=std::max(1,int(std::ceil(std::max({a.distance_to(b),b.distance_to(c),c.distance_to(a)})/(leaf_size*0.6f))));
-            float area=(b-a).cross(c-a).length()/float((steps+1)*(steps+2));
             for(int u=0;u<=steps;++u)for(int v=0;v<=steps-u;++v) {
                 float x=float(u)/steps,y=float(v)/steps,z=1-x-y;
                 Vector3 n=normals.is_empty()?(b-a).cross(c-a).normalized():(normals[ids[0]]*z+normals[ids[1]]*x+normals[ids[2]]*y).normalized();
                 Color color=colors.is_empty()?Color(0.8f,0.6f,0.3f):colors[ids[0]]*z+colors[ids[1]]*x+colors[ids[2]]*y;
                 Vector2 uv=uvs.is_empty()?Vector2():uvs[ids[0]]*z+uvs[ids[1]]*x+uvs[ids[2]]*y;
                 color=surface_color.sample(uv,color);
-                sample(a*z+b*x+c*y,color,n,area);
+                sample(a*z+b*x+c*y,color,n);
             }
         }
     }

@@ -248,11 +248,11 @@ func _make_hud() -> void:
 	var ridge_controls:=HBoxContainer.new()
 	ridge_controls.add_theme_constant_override("separation",12)
 	panel_column.add_child(ridge_controls)
-	ridge_label=_label("Ridge suppression  /  0.65 cells",12,Color("#ebd6ad"))
+	ridge_label=_label("Ridge suppression  /  1.50 cells",12,Color("#ebd6ad"))
 	ridge_label.custom_minimum_size.x=260
 	ridge_controls.add_child(ridge_label)
 	ridge_slider=HSlider.new()
-	ridge_slider.min_value=0; ridge_slider.max_value=1.5; ridge_slider.step=0.05; ridge_slider.value=0.65
+	ridge_slider.min_value=0; ridge_slider.max_value=1.5; ridge_slider.step=0.05; ridge_slider.value=1.5
 	ridge_slider.custom_minimum_size.x=200
 	ridge_slider.value_changed.connect(func(value: float): voxels.set_shadow_recession(value); ridge_label.text="Ridge suppression  /  %.2f cells" % value)
 	ridge_controls.add_child(ridge_slider)
@@ -332,7 +332,7 @@ func _self_test() -> void:
 		await _settle()
 		valid=valid and voxels.multimesh.buffer==baseline_buffer
 		valid=valid and is_equal_approx(float(caster.material_override.get_shader_parameter("recession")),recession)
-	voxels.set_shadow_recession(0.65)
+	voxels.set_shadow_recession(1.5)
 	distance = 60.0
 	await _settle()
 	valid = valid and voxels.get_selected_count() == coarse and voxels.validate_cut()

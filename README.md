@@ -19,7 +19,7 @@ Or open project.godot in Godot and press F6/F5 after building. Close this projec
 
 ## Explore
 
-The lab supports [textured Unreal meshes and a three-pane coverage experiment](docs/imported-assets.md): actual UV base-colour transfer, matched pixel squares, and continuous/quantized coverage using the baseline's exact voxel cut. Exported assets stay local and ignored.
+The lab supports [textured Unreal meshes and matched-pixel comparison](docs/imported-assets.md): actual UV base-colour transfer and equal screen-space splat widths. Exported assets stay local and ignored.
 
 **New: [Motion lab](docs/motion-lab.md)** — open it from the lighthouse to compare a fixed-probe texel-splat core adaptation with object-space voxels under synchronized camera/object motion, reveal, zoom, and threshold jitter. The lab includes a triangle reference and a report explaining the comparison's limits.
 
@@ -29,7 +29,7 @@ The lab supports [textured Unreal meshes and a three-pane coverage experiment](d
 - LOD colours displays octree depth; Freeze LOD holds the cut while you move the camera.
 - Shading selects One normal / voxel (default), Cube-face normals, or unlit Normal colours. The surface normal is passed as a flat per-instance varying and explicitly replaces the fragment normal on all six faces.
 - Receive voxel shadows toggles shadow reception on the voxel material only. Turn it off to separate normal-based lighting from cube self-shadowing; cast shadows on the water and lamp distance attenuation remain.
-- Ridge suppression recesses a shadow-only copy along each voxel's stored surface normal. Default 0.65 cell widths reduces small self-shadow ridges while retaining larger cast shadows; zero restores unrecessed casting. Visible geometry, colours, normal shading and LOD selection are unchanged. Large values weaken contact shadows and can cause light leaks, especially on thin/coarse surfaces. The shadow-only instance shares the existing MultiMesh buffer, with no second octree traversal.
+- Ridge suppression recesses a shadow-only copy along each voxel's stored surface normal. Default 1.5 cell widths strongly suppresses small self-shadow ridges while retaining larger cast shadows; zero restores unrecessed casting. Visible geometry, colours, normal shading and LOD selection are unchanged. Large values weaken contact shadows and can cause light leaks, especially on thin/coarse surfaces. The shadow-only instance shares the existing MultiMesh buffer, with no second octree traversal.
 - Space toggles auto orbit; H hides the interface; Escape exits.
 
 ## Renderer
