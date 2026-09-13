@@ -148,7 +148,9 @@ void VoxelOctreeDemo::rebuild_mesh(const std::vector<int> &p_selected) {
 	result->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 	Ref<StandardMaterial3D> material;
 	material.instantiate();
-	material->set_vertex_color_use_as_albedo(true);
+	// ArrayMesh vertex colors are consumed as the material albedo by the standard
+	// material path; keeping the colours on the generated mesh also makes each
+	// parent voxel's filtered representative colour explicit.
 	material->set_roughness(1.0f);
 	result->surface_set_material(0, material);
 	set_mesh(result);
