@@ -29,6 +29,7 @@ The lab supports [textured Unreal meshes and a three-pane coverage experiment](d
 - LOD colours displays octree depth; Freeze LOD holds the cut while you move the camera.
 - Shading selects One normal / voxel (default), Cube-face normals, or unlit Normal colours. The surface normal is passed as a flat per-instance varying and explicitly replaces the fragment normal on all six faces.
 - Receive voxel shadows toggles shadow reception on the voxel material only. Turn it off to separate normal-based lighting from cube self-shadowing; cast shadows on the water and lamp distance attenuation remain.
+- Ridge suppression recesses a shadow-only copy along each voxel's stored surface normal. Default 0.65 cell widths reduces small self-shadow ridges while retaining larger cast shadows; zero restores unrecessed casting. Visible geometry, colours, normal shading and LOD selection are unchanged. Large values weaken contact shadows and can cause light leaks, especially on thin/coarse surfaces. The shadow-only instance shares the existing MultiMesh buffer, with no second octree traversal.
 - Space toggles auto orbit; H hides the interface; Escape exits.
 
 ## Renderer
@@ -67,6 +68,7 @@ godot --path . -- --self-test
 godot --path . -- --capture=C:/absolute/path/normals.png --normals=2 --footprint=4
 godot --path . -- --capture=C:/absolute/path/faces.png --normals=1 --footprint=4
 godot --path . -- --capture=C:/absolute/path/surface.png --no-voxel-shadows
+godot --path . -- --capture=C:/absolute/path/original-shadows.png --shadow-recession=0
 ```
 
 The screenshot saves after 150 rendered frames. Water animation is time-based.

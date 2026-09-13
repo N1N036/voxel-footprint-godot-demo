@@ -23,6 +23,8 @@ class VoxelOctreeDemo : public MultiMeshInstance3D {
     std::unordered_set<uint64_t> occupied;
     Ref<MultiMesh> instances;
     Ref<ShaderMaterial> voxel_material;
+    Ref<ShaderMaterial> shadow_material;
+    float shadow_recession = 0.65f;
     Ref<Shader> shadowed_shader, unshadowed_shader;
     int normal_mode = 0;
     float target = 1.5f;
@@ -60,5 +62,6 @@ public:
     void reset_lod_history();
     void set_normal_mode(int mode);
     void set_voxel_shadows(bool enabled);
+    void set_shadow_recession(float cells);
 };
 }

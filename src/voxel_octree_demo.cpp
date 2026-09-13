@@ -31,6 +31,7 @@ void VoxelOctreeDemo::_bind_methods() {
     ClassDB::bind_method(D_METHOD("validate_cut"), &VoxelOctreeDemo::validate_cut);
     ClassDB::bind_method(D_METHOD("set_normal_mode", "mode"), &VoxelOctreeDemo::set_normal_mode);
     ClassDB::bind_method(D_METHOD("set_voxel_shadows", "enabled"), &VoxelOctreeDemo::set_voxel_shadows);
+    ClassDB::bind_method(D_METHOD("set_shadow_recession", "cells"), &VoxelOctreeDemo::set_shadow_recession);
     ClassDB::bind_method(D_METHOD("load_mesh", "mesh"), &VoxelOctreeDemo::load_mesh);
     ClassDB::bind_method(D_METHOD("set_hysteresis", "enabled"), &VoxelOctreeDemo::set_hysteresis);
     ClassDB::bind_method(D_METHOD("get_cut_churn"), &VoxelOctreeDemo::get_cut_churn);
@@ -163,6 +164,20 @@ void VoxelOctreeDemo::_ready() {
     unshadowed_shader->set_code(shadowed_shader->get_code().replace("render_mode specular_disabled;", "render_mode specular_disabled, shadows_disabled;"));
     voxel_material.instantiate(); voxel_material->set_shader(shadowed_shader);
     cube->set_material(voxel_material); instances->set_mesh(cube); set_multimesh(instances);
+    // Shared cut/buffer. Recess only the shadow caster along the stored normal.
+    // Local unit-cube displacement automatically scales with each selected LOD.
+    Ref<Shader> caster_shader; caster_shader.instantiate();
+    caster_shader->set_code("shader_type spatial; render_mode specular_disabled; uniform float recession=0.65; void vertex(){VERTEX-=normalize(INSTANCE_CUSTOM.xyz)*recession;}");
+    shadow_material.instantiate(); shadow_material->set_shader(caster_shader);
+    shadow_material->set_shader_parameter("recession",shadow_recession);
+    auto *caster=memnew(MultiMeshInstance3D);
+    caster->set_name("RecessedShadowCaster");
+    caster->set_multimesh(instances);
+    caster->set_material_override(shadow_material);
+    caster->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
+    caster->set_extra_cull_margin(2.0);
+    add_child(caster);
+    set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
     set_custom_aabb(AABB(Vector3(-19.2f,-19.2f,-19.2f),Vector3(38.4f,38.4f,38.4f)));
 }
 void VoxelOctreeDemo::select(int index,const Transform3D &view,float focal,float near_plane,std::vector<int> &cut) {
@@ -224,6 +239,10 @@ void VoxelOctreeDemo::set_voxel_shadows(bool enabled) {
         voxel_material->set_shader(enabled?shadowed_shader:unshadowed_shader);
         set_normal_mode(normal_mode);
     }
+}
+void VoxelOctreeDemo::set_shadow_recession(float cells) {
+    shadow_recession=std::clamp(cells,0.0f,1.5f);
+    if(shadow_material.is_valid())shadow_material->set_shader_parameter("recession",shadow_recession);
 }
 bool VoxelOctreeDemo::validate_cut() const {
     // Every source leaf must have exactly one selected ancestor (or itself).

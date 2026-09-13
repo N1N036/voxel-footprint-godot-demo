@@ -21,6 +21,8 @@ var normal_mode := 0
 var voxel_shadows := true
 var normal_selector: OptionButton
 var shadows_button: CheckButton
+var ridge_slider: HSlider
+var ridge_label: Label
 
 func _ready() -> void:
 	DisplayServer.window_set_title("LAST LIGHT / Voxel atelier")
@@ -67,6 +69,8 @@ func _ready() -> void:
 			shadows_button.set_pressed_no_signal(false)
 		if arg.begins_with("--capture="):
 			capture_path = arg.trim_prefix("--capture=")
+		if arg.begins_with("--shadow-recession="):
+			ridge_slider.value=float(arg.trim_prefix("--shadow-recession="))
 		if arg.begins_with("--footprint="):
 			voxels.target_pixel_footprint = float(arg.trim_prefix("--footprint="))
 		if arg.begins_with("--distance="):
@@ -241,6 +245,18 @@ func _make_hud() -> void:
 	shadows_button.button_pressed = true
 	shadows_button.toggled.connect(func(enabled: bool): voxel_shadows = enabled; voxels.set_voxel_shadows(enabled))
 	normal_controls.add_child(shadows_button)
+	var ridge_controls:=HBoxContainer.new()
+	ridge_controls.add_theme_constant_override("separation",12)
+	panel_column.add_child(ridge_controls)
+	ridge_label=_label("Ridge suppression  /  0.65 cells",12,Color("#ebd6ad"))
+	ridge_label.custom_minimum_size.x=260
+	ridge_controls.add_child(ridge_label)
+	ridge_slider=HSlider.new()
+	ridge_slider.min_value=0; ridge_slider.max_value=1.5; ridge_slider.step=0.05; ridge_slider.value=0.65
+	ridge_slider.custom_minimum_size.x=200
+	ridge_slider.value_changed.connect(func(value: float): voxels.set_shadow_recession(value); ridge_label.text="Ridge suppression  /  %.2f cells" % value)
+	ridge_controls.add_child(ridge_slider)
+	ridge_controls.add_child(_label("0 = original · higher reduces self-shadow ridges, but weakens contacts",12,Color("#adbfbd")))
 	_button(normal_controls, "Motion lab →", func(): get_tree().change_scene_to_file("res://comparison.tscn"), false)
 	var help := _label("DRAG  orbit     SCROLL  zoom     SPACE  auto orbit     H  hide interface", 12, Color("#adbfbd"))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -306,6 +322,17 @@ func _self_test() -> void:
 	var coarse := voxels.get_selected_count()
 	valid = valid and voxels.validate_cut() and coarse < fine
 	voxels.set_frozen(true)
+	var baseline_buffer:=voxels.multimesh.buffer
+	var caster:=voxels.get_node("RecessedShadowCaster") as MultiMeshInstance3D
+	valid=valid and caster.multimesh==voxels.multimesh
+	valid=valid and caster.cast_shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	valid=valid and voxels.cast_shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for recession in [0.0,0.65,1.5]:
+		voxels.set_shadow_recession(recession)
+		await _settle()
+		valid=valid and voxels.multimesh.buffer==baseline_buffer
+		valid=valid and is_equal_approx(float(caster.material_override.get_shader_parameter("recession")),recession)
+	voxels.set_shadow_recession(0.65)
 	distance = 60.0
 	await _settle()
 	valid = valid and voxels.get_selected_count() == coarse and voxels.validate_cut()
