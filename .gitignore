@@ -1,0 +1,7 @@
+.godot/
+bin/*.dll
+bin/*.so
+bin/*.dylib
+godot-cpp/bin/
+godot-cpp/gen/
+
