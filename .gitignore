@@ -1,5 +1,6 @@
 .godot/
 .sconsign.dblite
+work/
 bin/*
 godot-cpp/bin/
 godot-cpp/gen/

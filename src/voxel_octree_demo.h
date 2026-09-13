@@ -1,46 +1,46 @@
 #pragma once
-
-#include <godot_cpp/classes/mesh_instance3d.hpp>
-#include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
+#include <godot_cpp/classes/multi_mesh.hpp>
+#include <godot_cpp/classes/camera3d.hpp>
+#include <unordered_set>
 #include <vector>
-
 namespace godot {
-
-class VoxelOctreeDemo : public MeshInstance3D {
-	GDCLASS(VoxelOctreeDemo, MeshInstance3D)
-
-	struct Node {
-		Vector3 center;
-		float size;
-		Color color;
-		int children[8];
-		bool solid;
-	};
-
-	std::vector<Node> nodes;
-	float target_pixel_footprint = 1.5f;
-	int internal_render_width = 320;
-	Vector3 previous_camera_position;
-
-	void build_octree();
-	int make_node(const Vector3 &p_center, float p_size, int p_depth);
-	bool terrain_contains(const Vector3 &p) const;
-	void select_nodes(int p_index, const Vector3 &p_camera, std::vector<int> &r_selected) const;
-	void rebuild_mesh(const std::vector<int> &p_selected);
-	void append_cube(const Node &p_node, PackedVector3Array &r_vertices, PackedVector3Array &r_normals,
-			PackedColorArray &r_colors, PackedInt32Array &r_indices) const;
-
+class VoxelOctreeDemo : public MultiMeshInstance3D {
+    GDCLASS(VoxelOctreeDemo, MultiMeshInstance3D)
+    struct Node {
+        Vector3 center, position, normal;
+        Color color = Color(0,0,0,0);
+        float size = 38.4f;
+        int children[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
+        int count = 0;
+        bool split = false;
+    };
+    std::vector<Node> nodes;
+    std::vector<int> previous_cut;
+    std::unordered_set<uint64_t> occupied;
+    Ref<MultiMesh> instances;
+    float target = 1.5f;
+    bool diagnostic = false, dirty = true, frozen = false;
+    int leaf_count = 0;
+    double selection_ms = 0;
+    void sample(Vector3 p, Color c, Vector3 normal = Vector3(0,1,0));
+    void box(Vector3 p, Vector3 size, Color c);
+    void ellipsoid(Vector3 p, Vector3 scale, Color c);
+    void cylinder(Vector3 p, float radius, float top_radius, float height, Color c);
+    void build_scene();
+    void select(int index, const Transform3D &view, float focal, float near_plane, std::vector<int> &cut);
 protected:
-	static void _bind_methods();
-
+    static void _bind_methods();
 public:
-	VoxelOctreeDemo();
-	void _process(double p_delta) override;
-	void set_target_pixel_footprint(float p_value);
-	float get_target_pixel_footprint() const;
-	void set_internal_render_width(int p_value);
-	int get_internal_render_width() const;
+    void _ready() override;
+    void _process(double delta) override;
+    void set_target_pixel_footprint(float value);
+    float get_target_pixel_footprint() const { return target; }
+    void set_diagnostic(bool value) { diagnostic = value; dirty = true; }
+    void set_frozen(bool value) { frozen = value; }
+    int get_selected_count() const { return int(previous_cut.size()); }
+    int get_leaf_count() const { return leaf_count; }
+    double get_selection_ms() const { return selection_ms; }
+    bool validate_cut() const;
 };
-
-} // namespace godot
-
+}

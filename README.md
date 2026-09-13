@@ -1,37 +1,65 @@
-# Voxel Footprint — Godot C++ demo
+# Last Light — a voxel atelier
 
-A deliberately tiny prototype of the idea in the design notes: select a **single cut through a voxel octree** such that the chosen voxel is roughly 1–2 pixels wide in a low-resolution render target. The result is nearest-neighbour scaled to the window, so the geometric and display pixel vocabularies match.
+A miniature lighthouse island at sunset, built as a Godot C++ GDExtension experiment in screen-space voxel LOD. Ivory masonry, terracotta roofs, wind-shaped pines, a keeper's cottage, flowers and a wooden landing share one sparse surface octree.
 
-This is not a Nanite clone. It is a clear, editable starting point for experimenting with the useful part of that family of renderers: screen-space hierarchy selection.
+![Last Light](docs/last-light.png)
 
-## What it demonstrates
+## Run
 
-- A static procedural terrain stored as an occupancy octree in C++.
-- An internal 320×180 `SubViewport`, enlarged with nearest-neighbour filtering.
-- A per-frame hierarchy cut: keep a node when its projected width is at or below `target_pixel_footprint`; otherwise visit its children.
-- Parent nodes are real representative voxels, with filtered colour, not arbitrary child picks.
-
-Use left/right arrows to orbit. Use up/down arrows to adjust the footprint from 0.6 to 5 internal pixels. The coarsening transition is intentionally obvious; it is the technique, not a bug.
-
-## Prerequisites
-
-- Godot 4.7 (the project metadata is saved in the current stable format).
-- A C++17 compiler and [SCons](https://scons.org/).
-- The matching `godot-cpp` bindings (installed as a submodule below).
-
-## Build and run (Windows)
+Tested with Godot 4.7.2 on Windows / RTX 3070. The native bindings are pinned to Godot 4.5. Install Visual Studio's Desktop development with C++ workload, Python and SCons:
 
 ```powershell
+py -m pip install scons
 git submodule update --init --recursive
-scons platform=windows target=template_debug
+py -m SCons platform=windows target=template_debug
+.\run.ps1
 ```
 
-Open `project.godot` in Godot and run it. For a release build, replace `template_debug` with `template_release`.
+Or open project.godot in Godot and press F6/F5 after building. Close this project's editor and game before rebuilding its DLL. The helper also supports `./run.ps1 -Build` and `./run.ps1 -SelfTest`.
 
-## The selection rule
+## Explore
 
-`projected_pixels = node_world_width × pixels_per_world_unit / camera_distance`
+- Drag in the scene or use left/right arrows to orbit; scroll to zoom.
+- The footprint slider changes the target in **internal** pixels.
+- Resolution selects 320×180, 480×270 or 640×360. Default 480×270 scales exactly 3× at the initial 1440×810 window.
+- LOD colours displays octree depth; Freeze LOD holds the cut while you move the camera.
+- Space toggles auto orbit; H hides the interface; Escape exits.
 
-If `projected_pixels <= target_pixel_footprint`, the node represents its entire subtree; otherwise its children are considered. This gives a coherent hierarchy cut: a parent and one of its descendants are never rendered together.
+## Renderer
 
-For an actual game, replace the procedural occupancy test with imported voxel assets, add frustum/node visibility tests before descent, and use a GPU-driven instance or surfel path rather than rebuilding one CPU mesh.
+Surface samples are quantized into a world-locked 512³ address space (7.5 cm leaf cells), but only occupied branches are allocated. Each unique leaf contributes equally to its ancestors' position, colour and surface normal. This avoids weighting dense primitive sampling more heavily just because many samples landed in one cell.
+
+Traversal selects one cut through the octree. The projected cell width uses the camera's FOV, aspect policy, internal viewport dimensions and camera-space depth to a conservative near face:
+
+```text
+focal_pixels = viewport_axis / (2 × tan(fov / 2))
+projected_width = cell_width × focal_pixels / max(near, depth - cell_radius)
+```
+
+A 12% hysteresis band keeps a node's split state stable near transitions. No temporal antialiasing is used. History therefore intentionally affects counts near a boundary. The selected representatives use filtered positions/colours/normals, and GPU-instanced cubes provide depth and shadow rasterization. A single packed MultiMesh buffer is uploaded only when the cut or diagnostic colours change; static frames do not rebuild a mesh.
+
+The lighting uses a warm, low directional sun with shadows, cool ambient fill, matte materials, a lit lantern and subtle distance fog. Water and the lantern bulb are conventional meshes. The sea is a small procedural shader with restrained ripples and approximate shoreline foam.
+
+This is a **CPU octree selector with GPU instanced rasterization**, not a custom compute renderer, SDF raymarcher, Nanite implementation, or GPU visibility system. The choice keeps the experiment editable and lets it use Godot's lighting/shadows. Selection currently visits the whole island, including off-screen parts, to retain shadow casters.
+
+## Limits of the experiment
+
+The target is a cell-width heuristic, not a guarantee of one voxel for every screen pixel. Finite leaf resolution caps detail close up. Cubes overlap by 8%, and their filtered centroid offsets are bounded to 2.5% of cell width to reduce gaps. Filtered parents can widen silhouettes, merge thin features, and blend material boundaries at coarse settings. Normal averaging is stable but loses multimodal surface detail. Hysteresis reduces popping without eliminating it. The shader sea and full-scene shadow work are outside the LOD budget.
+
+## Validation
+
+`run.ps1 -SelfTest` checks that every source leaf is represented by exactly one selected ancestor, that coarser targets reduce the selected count, frozen cuts remain unchanged while moving, retreating reduces detail, and increased render resolution restores detail.
+
+The current scene contains approximately 128,000 occupied source voxels. The default view reached 60 fps on this machine at 480×270; CPU selection was approximately 2–3 ms. A cold 4-pixel view selected approximately 6,000 representatives. These are observations, not portable performance guarantees.
+
+For deterministic view capture:
+
+```powershell
+godot --path . -- --capture=C:/absolute/path/view.png
+godot --path . -- --capture=C:/absolute/path/lod.png --footprint=4 --lod
+godot --path . -- --self-test
+```
+
+The screenshot saves after 150 rendered frames. Water animation is time-based.
+
+All scene geometry and shaders were authored for this demo; no external art assets are required.

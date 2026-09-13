@@ -1,10 +1,9 @@
 [configuration]
 entry_symbol = "voxel_footprint_library_init"
-compatibility_minimum = "4.3"
+compatibility_minimum = "4.5"
 
 [libraries]
 windows.debug.x86_64 = "res://bin/voxel_footprint.windows.template_debug.x86_64.dll"
 windows.release.x86_64 = "res://bin/voxel_footprint.windows.template_release.x86_64.dll"
 linux.debug.x86_64 = "res://bin/libvoxel_footprint.linux.template_debug.x86_64.so"
 linux.release.x86_64 = "res://bin/libvoxel_footprint.linux.template_release.x86_64.so"
-
