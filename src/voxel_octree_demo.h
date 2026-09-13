@@ -47,6 +47,11 @@ public:
     int get_leaf_count() const { return leaf_count; }
     double get_selection_ms() const { return selection_ms; }
     bool validate_cut() const;
+    void load_mesh(const Ref<Mesh> &mesh);
+    void set_hysteresis(bool enabled) { hysteresis = enabled; }
+    double get_cut_churn() const { return cut_churn; }
+    bool hysteresis = true;
+    double cut_churn = 0;
     void set_normal_mode(int mode);
     void set_voxel_shadows(bool enabled);
 };

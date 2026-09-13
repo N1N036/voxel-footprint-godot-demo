@@ -1,0 +1,88 @@
+{
+	"probe_resolution": 256,
+	"results": [
+		{
+			"case": "Object rotation",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.669684980254216,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Object translation",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.838996907799761,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Camera orbit / reveal",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Camera translation",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Camera look rotation",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Zoom through LOD",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.95067264573991,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0688930988812378,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 269
+		},
+		{
+			"case": "Threshold jitter",
+			"coverage_valid": true,
+			"hysteresis": true,
+			"max_cut_churn": 0.0,
+			"max_voxels": 14583,
+			"mean_cut_churn": 0.0,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 14583
+		},
+		{
+			"case": "Threshold jitter",
+			"coverage_valid": true,
+			"hysteresis": false,
+			"max_cut_churn": 0.0342861374407583,
+			"max_voxels": 14050,
+			"mean_cut_churn": 0.0205715116137873,
+			"mean_triangle_slot_reassignment": 0.0,
+			"min_voxels": 13026
+		}
+	],
+	"source_voxels": 14583,
+	"steps_per_case": 120,
+	"voxel_target": 2.70000004768372
+}

@@ -241,6 +241,7 @@ func _make_hud() -> void:
 	shadows_button.button_pressed = true
 	shadows_button.toggled.connect(func(enabled: bool): voxel_shadows = enabled; voxels.set_voxel_shadows(enabled))
 	normal_controls.add_child(shadows_button)
+	_button(normal_controls, "Motion lab →", func(): get_tree().change_scene_to_file("res://comparison.tscn"), false)
 	var help := _label("DRAG  orbit     SCROLL  zoom     SPACE  auto orbit     H  hide interface", 12, Color("#adbfbd"))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(help)

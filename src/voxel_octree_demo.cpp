@@ -30,6 +30,9 @@ void VoxelOctreeDemo::_bind_methods() {
     ClassDB::bind_method(D_METHOD("validate_cut"), &VoxelOctreeDemo::validate_cut);
     ClassDB::bind_method(D_METHOD("set_normal_mode", "mode"), &VoxelOctreeDemo::set_normal_mode);
     ClassDB::bind_method(D_METHOD("set_voxel_shadows", "enabled"), &VoxelOctreeDemo::set_voxel_shadows);
+    ClassDB::bind_method(D_METHOD("load_mesh", "mesh"), &VoxelOctreeDemo::load_mesh);
+    ClassDB::bind_method(D_METHOD("set_hysteresis", "enabled"), &VoxelOctreeDemo::set_hysteresis);
+    ClassDB::bind_method(D_METHOD("get_cut_churn"), &VoxelOctreeDemo::get_cut_churn);
 }
 void VoxelOctreeDemo::sample(Vector3 p, Color c, Vector3 normal) {
     int xyz[3];
@@ -148,7 +151,7 @@ void VoxelOctreeDemo::build_scene() {
     occupied.clear(); occupied.rehash(0);
 }
 void VoxelOctreeDemo::_ready() {
-    build_scene();
+    if(nodes.empty())build_scene();
     instances.instantiate(); instances->set_transform_format(MultiMesh::TRANSFORM_3D); instances->set_use_colors(true); instances->set_use_custom_data(true);
     Ref<BoxMesh> cube; cube.instantiate(); cube->set_size(Vector3(1,1,1));
     shadowed_shader = ResourceLoader::get_singleton()->load("res://voxel.gdshader");
@@ -164,7 +167,7 @@ void VoxelOctreeDemo::select(int index,const Transform3D &view,float focal,float
     float depth=std::max(near_plane,-p.z-n.size*0.866026f);
     float pixels=n.size*focal/depth;
     bool leaf=n.size<CELL*1.01f;
-    float threshold=target*(n.split?0.88f:1.12f);
+    float threshold=target*(hysteresis?(n.split?0.88f:1.12f):1.0f);
     if(leaf||pixels<=threshold) { n.split=false; cut.push_back(index); return; }
     n.split=true;
     for(int child:n.children) if(child>=0)select(child,view,focal,near_plane,cut);
@@ -181,7 +184,13 @@ void VoxelOctreeDemo::_process(double) {
         select(0,camera->get_global_transform().affine_inverse()*get_global_transform(),focal,camera->get_near(),cut);
     }
     selection_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+    cut_churn=0;
     if(cut==previous_cut&&!dirty)return;
+    std::unordered_set<int> old(previous_cut.begin(),previous_cut.end());
+    size_t shared=0;
+    for(int id:cut)if(old.count(id))++shared;
+    size_t union_size=cut.size()+previous_cut.size()-shared;
+    cut_churn=union_size?1.0-double(shared)/double(union_size):0.0;
     instances->set_instance_count(int(cut.size()));
     PackedFloat32Array buffer; buffer.resize(int(cut.size())*20); float *data=buffer.ptrw();
     for(size_t i=0;i<cut.size();++i) {
@@ -223,4 +232,31 @@ bool VoxelOctreeDemo::validate_cut() const {
         if(leaf&&coverage!=1)return false;
     }
     return true;
+}
+void VoxelOctreeDemo::load_mesh(const Ref<Mesh> &mesh) {
+    nodes.clear(); previous_cut.clear(); occupied.clear(); leaf_count=0; nodes.emplace_back();
+    for(int surface=0;surface<mesh->get_surface_count();++surface) {
+        Array arrays=mesh->surface_get_arrays(surface);
+        PackedVector3Array vertices=arrays[Mesh::ARRAY_VERTEX], normals=arrays[Mesh::ARRAY_NORMAL];
+        PackedColorArray colors=arrays[Mesh::ARRAY_COLOR];
+        PackedInt32Array indices=arrays[Mesh::ARRAY_INDEX];
+        int count=indices.is_empty()?vertices.size():indices.size();
+        for(int i=0;i+2<count;i+=3) {
+            int ids[3]; for(int k=0;k<3;++k)ids[k]=indices.is_empty()?i+k:indices[i+k];
+            Vector3 a=vertices[ids[0]],b=vertices[ids[1]],c=vertices[ids[2]];
+            int steps=std::max(1,int(std::ceil(std::max({a.distance_to(b),b.distance_to(c),c.distance_to(a)})/0.045f)));
+            for(int u=0;u<=steps;++u)for(int v=0;v<=steps-u;++v) {
+                float x=float(u)/steps,y=float(v)/steps,z=1-x-y;
+                Vector3 n=normals.is_empty()?(b-a).cross(c-a).normalized():(normals[ids[0]]*z+normals[ids[1]]*x+normals[ids[2]]*y).normalized();
+                Color color=colors.is_empty()?Color(0.8f,0.6f,0.3f):colors[ids[0]]*z+colors[ids[1]]*x+colors[ids[2]]*y;
+                sample(a*z+b*x+c*y,color,n);
+            }
+        }
+    }
+    for(Node &n:nodes) {
+        if(n.count==0)continue;
+        n.position/=float(n.count); n.color/=float(n.count); n.color.a=1;
+        n.normal=n.normal.length_squared()>0.001f?n.normal.normalized():Vector3(0,1,0);
+    }
+    occupied.clear(); dirty=true;
 }

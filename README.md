@@ -19,6 +19,8 @@ Or open project.godot in Godot and press F6/F5 after building. Close this projec
 
 ## Explore
 
+**New: [Motion lab](docs/motion-lab.md)** — open it from the lighthouse to compare a fixed-probe texel-splat core adaptation with object-space voxels under synchronized camera/object motion, reveal, zoom, and threshold jitter. The lab includes a triangle reference and a report explaining the comparison's limits.
+
 - Drag in the scene or use left/right arrows to orbit; scroll to zoom.
 - The footprint slider changes the target in **internal** pixels.
 - Resolution selects 320×180, 480×270 or 640×360. Default 480×270 scales exactly 3× at the initial 1440×810 window.

@@ -1,5 +1,6 @@
 #include "register_types.h"
 #include "voxel_octree_demo.h"
+#include "probe_splat_demo.h"
 
 #include <godot_cpp/godot.hpp>
 
@@ -8,6 +9,7 @@ using namespace godot;
 void initialize_voxel_footprint_module(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) return;
 	ClassDB::register_class<VoxelOctreeDemo>();
+	ClassDB::register_class<ProbeSplatDemo>();
 }
 
 void uninitialize_voxel_footprint_module(ModuleInitializationLevel p_level) {
@@ -24,4 +26,3 @@ extern "C" GDExtensionBool GDE_EXPORT voxel_footprint_library_init(
 	init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
 	return init_obj.init();
 }
-
