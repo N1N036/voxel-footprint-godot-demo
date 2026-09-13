@@ -11,6 +11,9 @@ var reference: MeshInstance3D
 var coverage_view: MultiMeshInstance3D
 var coverage_stats: Label
 var coverage_mode := 2
+var canvas_scale := 1.0
+var canvas_label: Label
+var canvas_slider: HSlider
 var probe_origin := Vector3(6, 4.5, 10)
 var fixed_origin := Vector3(6, 4.5, 10)
 var case_index := 0
@@ -73,6 +76,8 @@ func _ready() -> void:
 		if arg.begins_with("--time="): time = float(arg.trim_prefix("--time=")); playing = false
 		if arg == "--lab-test": self_test = true; playing = false
 		if arg == "--asset-test": playing=false; _asset_test.call_deferred()
+		if arg == "--canvas-test": playing=false; _canvas_test.call_deferred()
+		if arg.begins_with("--canvas-scale="): _set_canvas_scale(float(arg.trim_prefix("--canvas-scale=")))
 		if arg.begins_with("--report="): report_path=arg.trim_prefix("--report="); playing=false
 		if arg.begins_with("--record="): recording_dir=arg.trim_prefix("--record="); playing=false
 	_apply_motion()
@@ -164,7 +169,7 @@ func _build_ui() -> void:
 	column.add_theme_constant_override("separation", 12)
 	margin.add_child(column)
 	column.add_child(_label("MOTION LAB   /   PERSISTENT SAMPLES", 27, Color("#efd9b2")))
-	column.add_child(_label("Same triangle asset · same camera and light · 320 × 270 per view · no TAA, shadows or animated water",14))
+	column.add_child(_label("Same triangle asset · synchronized canvas resolution, camera and light · no TAA, shadows or animated water",14))
 	var assets_row := HBoxContainer.new()
 	assets_row.add_theme_constant_override("separation",16)
 	column.add_child(assets_row)
@@ -270,6 +275,19 @@ func _build_ui() -> void:
 	zoom.custom_minimum_size.x=100
 	zoom.value_changed.connect(func(value: float): display_zoom=value)
 	detail_row.add_child(zoom)
+	var canvas_row:=HBoxContainer.new()
+	canvas_row.add_theme_constant_override("separation",12)
+	column.add_child(canvas_row)
+	canvas_label=_label("Canvas resolution: 320 × 270 / view (1×)",13)
+	canvas_label.custom_minimum_size.x=340
+	canvas_row.add_child(canvas_label)
+	canvas_slider=HSlider.new()
+	canvas_slider.min_value=0.5; canvas_slider.max_value=4.0
+	canvas_slider.step=0.1; canvas_slider.value=canvas_scale
+	canvas_slider.custom_minimum_size.x=260
+	canvas_slider.value_changed.connect(_set_canvas_scale)
+	canvas_row.add_child(canvas_slider)
+	canvas_row.add_child(_label("Higher = finer pixels · all three views · Shared px stays in canvas pixels",12))
 	status_label=_label("",12,Color("#d5bc8a"))
 	column.add_child(status_label)
 	description = _label("",13)
@@ -323,6 +341,13 @@ func _build_renderers() -> void:
 		splat_materials.append(material)
 	_sync_splat_settings()
 	_sync_lighting()
+
+func _set_canvas_scale(value: float) -> void:
+	canvas_scale=clampf(value,0.5,4.0)
+	canvas_slider.set_value_no_signal(canvas_scale)
+	var dimensions:=Vector2i(roundi(320*canvas_scale),roundi(270*canvas_scale))
+	for viewport in views: viewport.size=dimensions
+	canvas_label.text="Canvas resolution: %d × %d / view (%.1f×)" % [dimensions.x,dimensions.y,canvas_scale]
 
 func _sync_splat_settings() -> void:
 	voxels.target_pixel_footprint=shared_pixels
@@ -503,6 +528,21 @@ func _count_triangles() -> void:
 		var arrays:=source.surface_get_arrays(surface)
 		var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX]
 		triangle_count+=indices.size()/3
+
+func _canvas_test() -> void:
+	var valid:=true
+	for value in [0.5,1.0,2.0,4.0,1.0]:
+		_set_canvas_scale(value)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		for viewport in views:
+			valid=valid and viewport.size==Vector2i(roundi(320*value),roundi(270*value))
+		for material in splat_materials:
+			valid=valid and material.get_shader_parameter("pixel_size")==shared_pixels
+		valid=valid and voxels.validate_cut() and voxels.get_leaf_count()==original_leaves
+		print("CANVAS_TEST scale=",value," size=",views[0].size," valid=",valid)
+	print("CANVAS_TEST ","PASS" if valid else "FAIL")
+	get_tree().quit(0 if valid else 1)
 
 func _asset_test() -> void:
 	set_process(false)

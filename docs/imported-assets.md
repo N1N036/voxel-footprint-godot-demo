@@ -28,10 +28,13 @@ Earlier thin-feature LOD heuristics, Thin px, adjustable dilation and density UI
 
 Run `godot --path . comparison.tscn`. Choose an asset, pause/scrub, test orbit and zoom, toggle Triangle reference or Lighting, and switch coverage modes.
 
+**Canvas resolution** scales all three render canvases together from 0.5× (160×135) to 4× (1280×1080), starting at 320×270. Higher values produce finer displayed pixels without changing the pane size or camera framing. Shared px remains measured in internal canvas pixels, so its displayed footprint becomes smaller as canvas resolution increases. Higher resolution also requests finer voxel LOD and costs more GPU work. Probe capture density remains independently controlled by Probe resolution.
+
 ```powershell
 godot --path . comparison.tscn -- --asset-test
 godot --path . comparison.tscn -- --lab-test
 godot --path . --script tools/test_pixel_footprint.gd
+godot --path . comparison.tscn -- --canvas-test
 ```
 
 Checks cover UV/material presence, colour variation, finite fractional coverage, shared buffers, synchronized cameras/transforms, complete hierarchy cuts over 21 poses, and GPU square area across depths/sizes. These are regression checks, not perceptual stability measurements.
